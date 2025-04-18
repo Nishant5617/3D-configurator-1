@@ -173,9 +173,10 @@ function App() {
       1000
     );
     
-    camera.position.z = 2;
-    camera.position.y = 2;
-    camera.position.x = 1;
+    camera.position.z = 1.2;
+    camera.position.y = 1.2;
+    camera.position.x = 1.2;
+    // camera.lookAt(0, 6, 0);
     cameraRef.current = camera;
     
     // Set up renderer
@@ -196,6 +197,7 @@ function App() {
     
     // Add orbit controls
     const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target0.y=0.5
     controls.enableDamping = true;
     controls.dampingFactor = 0.1;
     controls.enableZoom = true;
