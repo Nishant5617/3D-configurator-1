@@ -81,6 +81,23 @@ const ChevronDownIcon = () => (
   </svg>
 );
 
+const RulerIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="20"
+    height="20"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <rect x="2" y="7" width="20" height="10" rx="2" />
+    <path d="M6 7v10M10 7v4M14 7v4M18 7v10" />
+  </svg>
+);
+
 
 function App() {
   // State variables
@@ -95,6 +112,7 @@ function App() {
   const [showHandleFinishOptions, setShowHandleFinishOptions] = useState(false);
   const [showLegOptions, setShowLegOptions] = useState(false);
   const [showQR, setShowQR] = useState(false);
+  const [showMeasurements, setShowMeasurements] = useState(false);
   const[arUrl, setArUrl]= useState("");
 
 
@@ -109,7 +127,13 @@ function App() {
   const currentModelRef = useRef(null);
   const handleModelRef = useRef(null); // Reference for handle model
   const legModelRef = useRef(null);
+  const measurementLinesRef = useRef([]);
   const textureLoaderRef = useRef(new THREE.TextureLoader());
+  let measurementLabelPositions = {
+    width: null,
+    height: null,
+    depth: null
+  };
   
   // GLB model paths for furniture options with image thumbnails
   const furnitureOptions = [
@@ -148,13 +172,13 @@ function App() {
     { id: 'fonthill', name: 'Fonthill', color: '#A16C38', 
       texturePathTemplate: '565/{furnitureId}/Varients/WOOD LAMINATE FINISHES/Fonthill.png', 
       roughnessTexturePathTemplate: '565/565-01/565-01/Varients/565 Single Drawer Roughness.png' },
-    { id: 'macadamia', name: 'Macadamia', color: '#9C8E7B', 
+    { id: 'macadamia', name: 'Macadamia Nut', color: '#9C8E7B', 
       texturePathTemplate: '565/{furnitureId}/Varients/WOOD LAMINATE FINISHES/Macadamia Nut.png', 
       roughnessTexturePathTemplate: '565/565-01/565-01/Varients/565 Single Drawer Roughness.png' },
     { id: 'naturalash', name: 'Natural Ash', color: '#E5D7B7', 
       texturePathTemplate: '565/{furnitureId}/Varients/WOOD LAMINATE FINISHES/Natural Ash.png', 
       roughnessTexturePathTemplate: '565/565-01/565-01/Varients/565 Single Drawer Roughness.png' },
-    { id: 'reya', name: 'Reya', color: '#5B5B40', 
+    { id: 'raya', name: 'Raya', color: '#5B5B40', 
       texturePathTemplate: '565/{furnitureId}/Varients/WOOD LAMINATE FINISHES/Raya.png', 
       roughnessTexturePathTemplate: '565/565-01/565-01/Varients/565 Single Drawer Roughness.png' },
     { id: 'rivercherry', name: 'River Cherry', color: '#B68E5B', 
@@ -247,16 +271,26 @@ function App() {
     
     // Animation loop
     const animate = () => {
-      requestAnimationFrame(animate);
-      
-      if (controlsRef.current) {
-        controlsRef.current.update();
-      }
-      
-      renderer.render(scene, camera);
-    };
-    
-    animate();
+  requestAnimationFrame(animate);
+  
+  // Update controls
+  if (controlsRef.current) {
+    controlsRef.current.update();
+  }
+  
+  // Update measurement labels with each frame
+  if (showMeasurements) {
+    updateMeasurementLabels();
+  }
+  
+  // Render scene
+  if (rendererRef.current && sceneRef.current && cameraRef.current) {
+    rendererRef.current.render(sceneRef.current, cameraRef.current);
+  }
+};
+
+// Start animation loop
+animate();
     
     // Handle resize
     const handleResize = () => {
@@ -393,102 +427,24 @@ function App() {
       );
     });
   };
-  
-//  const generateARQRCode = () => {
-//   const baseUrl = window.location.origin;
-//   const selectedFurniture = furnitureOptions.find(option => option.name === selectedSize);
-  
-//   if (!selectedFurniture) {
-//     console.error("No furniture selected");
-//     return null;
-//   }
-  
-//   // Create URL with parameters for the selected configuration
-//   const arViewerUrl = `${baseUrl}/ar-viewer?` + 
-//     `modelId=${encodeURIComponent(selectedFurniture.id)}` +
-//     `&woodFinish=${encodeURIComponent(woodFinish)}` +
-//     `&handleType=${encodeURIComponent(handleType)}` +
-//     `&handleFinish=${encodeURIComponent(handleFinish)}` +
-//     `&legOption=${encodeURIComponent(legOption)}`;
-  
-//   return (
-//     <div className="qr-code-container">
-//       <h3>Scan to View in AR</h3>
-//       <QRCode value={arViewerUrl} size={200} level="H" includeMargin={true} />
-//       <p>Scan with your mobile device to view in AR</p>
-//       <button 
-//         className="ar-direct-link"
-//         onClick={() => window.open(arViewerUrl, '_blank')}
-//       >
-//         Open AR viewer directly
-//       </button>
-//       <p className="qr-info">Configuration details will be transferred to the AR view</p>
-//     </div>
-//   );
-// };
 
-const generateARQRCode = async () => {
-  console.log("hello hello");
+const generateARQRCode = () => {
   const baseUrl = window.location.origin;
-
   const selectedFurniture = furnitureOptions.find(option => option.name === selectedSize);
-  if (!selectedFurniture) {
-    console.error("No furniture selected");
-    return null;
-  }
 
-  // 1. Export current scene (main model + handle + leg) as a single GLB
-  const exporter = new GLTFExporter();
-  const root = new THREE.Group();
-  if (currentModelRef.current) root.add(currentModelRef.current.clone());
-  if (handleModelRef.current) root.add(handleModelRef.current.clone());
-  if (legModelRef.current) root.add(legModelRef.current.clone());
+  if (!selectedFurniture) return;
 
-  return new Promise((resolve, reject) => {
-    exporter.parse(
-      root,
-      (result) => {
-        const glbBlob = new Blob([result], { type: 'model/gltf-binary' });
-
-        // 2. Create Blob URL
-        const blobUrl = URL.createObjectURL(glbBlob);
-        console.log("blob url: ",blobUrl);
-        
-        // Create a download link and click it
-          const a = document.createElement('a');
-          a.href = blobUrl;
-          a.download = 'model.glb'; // filename for download
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-
-          // Optional: revoke the object URL later to free memory
-          // URL.revokeObjectURL(blobUrl);
-
-
-
-
-    
-        // `&modelId=${encodeURIComponent(selectedFurniture.id)}` +
-        // `&woodFinish=${encodeURIComponent(woodFinish)}` +
-        // `&handleType=${encodeURIComponent(handleType)}` +
-        // `&handleFinish=${encodeURIComponent(handleFinish)}` +
-        // `&legOption=${encodeURIComponent(legOption)}`;
-
-        // 3. Use blob URL in QR temporarily (for same-session use only)
-        const arViewerUrl = `${baseUrl}/ar-viewer?blobUrl=${encodeURIComponent(blobUrl)}`;
-        setArUrl(arViewerUrl);     // Set for QR
-        console.log("url",arViewerUrl);
-      setShowQR(true);
-      },
-      (error) => {
-        console.error("GLB export failed", error);
-        reject(error);
-      },
-      { binary: true }
-    );
-  });
+  const arViewerUrl = `${baseUrl}/ar-viewer?` +
+    `modelId=${encodeURIComponent(selectedFurniture.id)}` +
+    `&woodFinish=${encodeURIComponent(woodFinish)}` +
+    `&handleType=${encodeURIComponent(handleType)}` +
+    `&handleFinish=${encodeURIComponent(handleFinish)}` +
+    `&legOption=${encodeURIComponent(legOption)}`;
+console.log(selectedFurniture.id)
+  setArUrl(arViewerUrl);
+  setShowQR(true);
 };
+
   
   
   
@@ -678,6 +634,15 @@ const generateARQRCode = async () => {
       }
     );
   }, [selectedSize]);
+  useEffect(() => {
+    if (showMeasurements) {
+      // Toggle off and on to refresh measurements
+      setShowMeasurements(false);
+      setTimeout(() => {
+        toggleMeasurementLines();
+      }, 300); // Small delay to ensure model is fully loaded
+    }
+  }, [selectedSize]);
   
   // Apply wood finish texture when it changes
   useEffect(() => {
@@ -700,6 +665,189 @@ const generateARQRCode = async () => {
       applyWoodTexture(legModelRef.current, selectedWoodFinish);
     }
   }, [woodFinish]);
+
+  
+  // Create a container for labels if it doesn't exist
+const createMeasurementLabelsContainer = () => {
+  let container = document.getElementById('measurement-labels-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'measurement-labels-container';
+    container.style.position = 'absolute';
+    container.style.top = '0';
+    container.style.left = '0';
+    container.style.width = '100%';
+    container.style.height = '100%';
+    container.style.pointerEvents = 'none';
+    container.style.zIndex = '10';
+    viewerRef.current.appendChild(container);
+  }
+  return container;
+};
+
+// Updated function to create and position label
+const createLabel = (text, position, labelId) => {
+  const container = createMeasurementLabelsContainer();
+  
+  // Check if label already exists
+  let label = document.getElementById(labelId);
+  if (!label) {
+    label = document.createElement("div");
+    label.id = labelId;
+    label.className = "dimension-label";
+    label.style.position = "absolute";
+    label.style.color = "#000";
+    label.style.fontSize = "12px";
+    label.style.background = "rgba(255, 255, 255, 0.8)";
+    label.style.padding = "2px 5px";
+    label.style.border = "1px solid #ccc";
+    label.style.borderRadius = "4px";
+    label.style.pointerEvents = "none";
+    label.style.whiteSpace = "nowrap";
+    label.style.zIndex = "100";
+    label.dataset.measurement = "true";
+    container.appendChild(label);
+  }
+  
+  label.textContent = text;
+  
+  // Position the label based on 3D coordinates
+  const vector = position.clone().project(cameraRef.current);
+  label.style.left = `${(vector.x + 1) / 2 * viewerRef.current.clientWidth}px`;
+  label.style.top = `${-(vector.y - 1) / 2 * viewerRef.current.clientHeight}px`;
+  label.style.transform = 'translate(-50%, -50%)';
+  
+  return label;
+};
+
+// Function to update label positions (call this in the animation loop)
+const updateMeasurementLabels = () => {
+  if (!showMeasurements || !cameraRef.current || !viewerRef.current) return;
+
+  measurementLinesRef.current.forEach((line) => {
+    const dimension = line.userData.dimension;
+    const label = document.getElementById(`${dimension}-label`);
+    if (!label) return;
+
+    // Get start and end points from line geometry
+    const positions = line.geometry.attributes.position.array;
+    const start = new THREE.Vector3(positions[0], positions[1], positions[2]);
+    const end = new THREE.Vector3(positions[3], positions[4], positions[5]);
+
+    // Compute midpoint
+    const midpoint = new THREE.Vector3().lerpVectors(start, end, 0.5);
+
+    // Project to 2D screen space
+    const screenPos = midpoint.clone().project(cameraRef.current);
+
+    const x = (screenPos.x + 1) * viewerRef.current.clientWidth / 2;
+    const y = (-screenPos.y + 1) * viewerRef.current.clientHeight / 2;
+
+    if (screenPos.z < 1) {
+      label.style.display = 'block';
+      label.style.left = `${x}px`;
+      label.style.top = `${y}px`;
+      label.style.transform = 'translate(-50%, -50%)';
+    } else {
+      label.style.display = 'none';
+    }
+  });
+};
+
+
+  
+  // Update each label position
+ 
+
+// Updated toggle measurements function
+// Updated toggle measurements function
+// Update the toggleMeasurementLines function to better handle different model sizes
+const toggleMeasurementLines = () => {
+  if (!currentModelRef.current || !sceneRef.current || !cameraRef.current) return;
+
+  // Remove existing lines
+  measurementLinesRef.current.forEach(line => sceneRef.current.remove(line));
+  measurementLinesRef.current = [];
+  
+  // Remove existing labels
+  document.querySelectorAll('[data-measurement="true"]').forEach(el => el.remove());
+  
+  if (!showMeasurements) {
+   const group = new THREE.Group();
+if (currentModelRef.current) group.add(currentModelRef.current.clone());
+if (legModelRef.current) group.add(legModelRef.current.clone());
+const box = new THREE.Box3().setFromObject(group);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    
+    const width = (size.x * 100).toFixed(2);
+    const height = (size.y * 100).toFixed(2);
+    const depth = (size.z * 100).toFixed(2);
+
+    // Calculate positions for labels with better offsets
+    // Use a percentage of the model size for offset to make it work with any model size
+    const widthPos = new THREE.Vector3(
+      (box.max.x + box.min.x) / 2, 
+      box.min.y - (size.y * 0.05), 
+      box.max.z + (size.z * 0.05)
+    );
+    
+    const heightPos = new THREE.Vector3(
+      box.min.x - (size.x * 0.05), 
+      (box.max.y + box.min.y) / 2, 
+      box.max.z + (size.z * 0.05)
+    );
+    
+    const depthPos = new THREE.Vector3(
+      box.min.x - (size.x * 0.05), 
+      box.min.y - (size.y * 0.05),
+      (box.max.z + box.min.z) / 2
+    );
+    measurementLabelPositions.width = widthPos;
+measurementLabelPositions.height = heightPos;
+measurementLabelPositions.depth = depthPos;
+
+
+    // Add measurement labels with unique IDs
+    createLabel(`Width: ${width} cm`, widthPos, 'width-label');
+    createLabel(`Height: ${height} cm`, heightPos, 'height-label');
+    createLabel(`Depth: ${depth} cm`, depthPos, 'depth-label');
+
+    const material = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
+
+    const addLine = (p1, p2) => {
+      const geometry = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+      const line = new THREE.Line(geometry, material);
+      sceneRef.current.add(line);
+      measurementLinesRef.current.push(line);
+    };
+
+    // Create slight offsets for the lines to make them more visible
+    const offset = Math.min(size.x, size.y, size.z) * 0.01;
+    
+    // X (width) - on front face (max Z)
+    addLine(
+      new THREE.Vector3(box.min.x, box.min.y - offset, box.max.z + offset), 
+      new THREE.Vector3(box.max.x, box.min.y - offset, box.max.z + offset)
+    );
+
+    // Y (height) - on front face (max Z)
+    addLine(
+      new THREE.Vector3(box.min.x - offset, box.min.y, box.max.z + offset), 
+      new THREE.Vector3(box.min.x - offset, box.max.y, box.max.z + offset)
+    );
+
+    // Z (depth) - from front to back on left side
+    addLine(
+      new THREE.Vector3(box.min.x - offset, box.min.y - offset, box.max.z), 
+      new THREE.Vector3(box.min.x - offset, box.min.y - offset, box.min.z)
+    );
+  }
+  
+
+
+  setShowMeasurements(!showMeasurements);
+};
   
   // Update handle when handle type or finish changes
   useEffect(() => {
@@ -814,6 +962,7 @@ if (selectedLegOption) {
         link.click();
       })
   };
+
   
 //SECTION 3: UI CONTROLS AND RENDERING
   //Function to toggle size options visibility
@@ -928,6 +1077,10 @@ if (selectedLegOption) {
                   <button className="control-btn" onClick={takeScreenshot}>
                     <CameraIcon />
                   </button>
+                  <button className="control-btn" onClick={toggleMeasurementLines}>
+  <RulerIcon />
+</button>
+
                   <button className="ar-view-btn" onClick={generateARQRCode}>
                     <ViewInYourRoom />
                   </button>
