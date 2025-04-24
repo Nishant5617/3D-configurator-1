@@ -5,6 +5,9 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import html2canvas from 'html2canvas';
 import { QRCodeSVG as QRCode } from 'qrcode.react'; // Named export with alias
+import { Suspense } from 'react';
+import DimensionHelper from './DimensionHelper';
+import DimensionLine from './DimensionLine';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter';
 <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
 
@@ -16,7 +19,7 @@ import {
   Route
 } from 'react-router-dom';
 
-import ARViewer from './ARViewer'; 
+
 
 
 
@@ -111,8 +114,8 @@ function App() {
   const [showHandleOptions, setShowHandleOptions] = useState(false);
   const [showHandleFinishOptions, setShowHandleFinishOptions] = useState(false);
   const [showLegOptions, setShowLegOptions] = useState(false);
-  const [showQR, setShowQR] = useState(false);
   const [showMeasurements, setShowMeasurements] = useState(false);
+  const [showQR, setShowQR] = useState(false);
   const[arUrl, setArUrl]= useState("");
 
 
@@ -127,13 +130,9 @@ function App() {
   const currentModelRef = useRef(null);
   const handleModelRef = useRef(null); // Reference for handle model
   const legModelRef = useRef(null);
-  const measurementLinesRef = useRef([]);
+
   const textureLoaderRef = useRef(new THREE.TextureLoader());
-  let measurementLabelPositions = {
-    width: null,
-    height: null,
-    depth: null
-  };
+  
   
   // GLB model paths for furniture options with image thumbnails
   const furnitureOptions = [
@@ -279,9 +278,6 @@ function App() {
   }
   
   // Update measurement labels with each frame
-  if (showMeasurements) {
-    updateMeasurementLabels();
-  }
   
   // Render scene
   if (rendererRef.current && sceneRef.current && cameraRef.current) {
@@ -634,15 +630,7 @@ console.log(selectedFurniture.id)
       }
     );
   }, [selectedSize]);
-  useEffect(() => {
-    if (showMeasurements) {
-      // Toggle off and on to refresh measurements
-      setShowMeasurements(false);
-      setTimeout(() => {
-        toggleMeasurementLines();
-      }, 300); // Small delay to ensure model is fully loaded
-    }
-  }, [selectedSize]);
+  
   
   // Apply wood finish texture when it changes
   useEffect(() => {
@@ -667,187 +655,12 @@ console.log(selectedFurniture.id)
   }, [woodFinish]);
 
   
-  // Create a container for labels if it doesn't exist
-const createMeasurementLabelsContainer = () => {
-  let container = document.getElementById('measurement-labels-container');
-  if (!container) {
-    container = document.createElement('div');
-    container.id = 'measurement-labels-container';
-    container.style.position = 'absolute';
-    container.style.top = '0';
-    container.style.left = '0';
-    container.style.width = '100%';
-    container.style.height = '100%';
-    container.style.pointerEvents = 'none';
-    container.style.zIndex = '10';
-    viewerRef.current.appendChild(container);
-  }
-  return container;
-};
-
-// Updated function to create and position label
-const createLabel = (text, position, labelId) => {
-  const container = createMeasurementLabelsContainer();
   
-  // Check if label already exists
-  let label = document.getElementById(labelId);
-  if (!label) {
-    label = document.createElement("div");
-    label.id = labelId;
-    label.className = "dimension-label";
-    label.style.position = "absolute";
-    label.style.color = "#000";
-    label.style.fontSize = "12px";
-    label.style.background = "rgba(255, 255, 255, 0.8)";
-    label.style.padding = "2px 5px";
-    label.style.border = "1px solid #ccc";
-    label.style.borderRadius = "4px";
-    label.style.pointerEvents = "none";
-    label.style.whiteSpace = "nowrap";
-    label.style.zIndex = "100";
-    label.dataset.measurement = "true";
-    container.appendChild(label);
-  }
-  
-  label.textContent = text;
-  
-  // Position the label based on 3D coordinates
-  const vector = position.clone().project(cameraRef.current);
-  label.style.left = `${(vector.x + 1) / 2 * viewerRef.current.clientWidth}px`;
-  label.style.top = `${-(vector.y - 1) / 2 * viewerRef.current.clientHeight}px`;
-  label.style.transform = 'translate(-50%, -50%)';
-  
-  return label;
-};
 
-// Function to update label positions (call this in the animation loop)
-const updateMeasurementLabels = () => {
-  if (!showMeasurements || !cameraRef.current || !viewerRef.current) return;
-
-  measurementLinesRef.current.forEach((line) => {
-    const dimension = line.userData.dimension;
-    const label = document.getElementById(`${dimension}-label`);
-    if (!label) return;
-
-    // Get start and end points from line geometry
-    const positions = line.geometry.attributes.position.array;
-    const start = new THREE.Vector3(positions[0], positions[1], positions[2]);
-    const end = new THREE.Vector3(positions[3], positions[4], positions[5]);
-
-    // Compute midpoint
-    const midpoint = new THREE.Vector3().lerpVectors(start, end, 0.5);
-
-    // Project to 2D screen space
-    const screenPos = midpoint.clone().project(cameraRef.current);
-
-    const x = (screenPos.x + 1) * viewerRef.current.clientWidth / 2;
-    const y = (-screenPos.y + 1) * viewerRef.current.clientHeight / 2;
-
-    if (screenPos.z < 1) {
-      label.style.display = 'block';
-      label.style.left = `${x}px`;
-      label.style.top = `${y}px`;
-      label.style.transform = 'translate(-50%, -50%)';
-    } else {
-      label.style.display = 'none';
-    }
-  });
-};
+   
 
 
-  
-  // Update each label position
- 
-
-// Updated toggle measurements function
-// Updated toggle measurements function
-// Update the toggleMeasurementLines function to better handle different model sizes
-const toggleMeasurementLines = () => {
-  if (!currentModelRef.current || !sceneRef.current || !cameraRef.current) return;
-
-  // Remove existing lines
-  measurementLinesRef.current.forEach(line => sceneRef.current.remove(line));
-  measurementLinesRef.current = [];
-  
-  // Remove existing labels
-  document.querySelectorAll('[data-measurement="true"]').forEach(el => el.remove());
-  
-  if (!showMeasurements) {
-   const group = new THREE.Group();
-if (currentModelRef.current) group.add(currentModelRef.current.clone());
-if (legModelRef.current) group.add(legModelRef.current.clone());
-const box = new THREE.Box3().setFromObject(group);
-    const size = new THREE.Vector3();
-    box.getSize(size);
     
-    const width = (size.x * 100).toFixed(2);
-    const height = (size.y * 100).toFixed(2);
-    const depth = (size.z * 100).toFixed(2);
-
-    // Calculate positions for labels with better offsets
-    // Use a percentage of the model size for offset to make it work with any model size
-    const widthPos = new THREE.Vector3(
-      (box.max.x + box.min.x) / 2, 
-      box.min.y - (size.y * 0.05), 
-      box.max.z + (size.z * 0.05)
-    );
-    
-    const heightPos = new THREE.Vector3(
-      box.min.x - (size.x * 0.05), 
-      (box.max.y + box.min.y) / 2, 
-      box.max.z + (size.z * 0.05)
-    );
-    
-    const depthPos = new THREE.Vector3(
-      box.min.x - (size.x * 0.05), 
-      box.min.y - (size.y * 0.05),
-      (box.max.z + box.min.z) / 2
-    );
-    measurementLabelPositions.width = widthPos;
-measurementLabelPositions.height = heightPos;
-measurementLabelPositions.depth = depthPos;
-
-
-    // Add measurement labels with unique IDs
-    createLabel(`Width: ${width} cm`, widthPos, 'width-label');
-    createLabel(`Height: ${height} cm`, heightPos, 'height-label');
-    createLabel(`Depth: ${depth} cm`, depthPos, 'depth-label');
-
-    const material = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
-
-    const addLine = (p1, p2) => {
-      const geometry = new THREE.BufferGeometry().setFromPoints([p1, p2]);
-      const line = new THREE.Line(geometry, material);
-      sceneRef.current.add(line);
-      measurementLinesRef.current.push(line);
-    };
-
-    // Create slight offsets for the lines to make them more visible
-    const offset = Math.min(size.x, size.y, size.z) * 0.01;
-    
-    // X (width) - on front face (max Z)
-    addLine(
-      new THREE.Vector3(box.min.x, box.min.y - offset, box.max.z + offset), 
-      new THREE.Vector3(box.max.x, box.min.y - offset, box.max.z + offset)
-    );
-
-    // Y (height) - on front face (max Z)
-    addLine(
-      new THREE.Vector3(box.min.x - offset, box.min.y, box.max.z + offset), 
-      new THREE.Vector3(box.min.x - offset, box.max.y, box.max.z + offset)
-    );
-
-    // Z (depth) - from front to back on left side
-    addLine(
-      new THREE.Vector3(box.min.x - offset, box.min.y - offset, box.max.z), 
-      new THREE.Vector3(box.min.x - offset, box.min.y - offset, box.min.z)
-    );
-  }
-  
-
-
-  setShowMeasurements(!showMeasurements);
-};
   
   // Update handle when handle type or finish changes
   useEffect(() => {
@@ -1062,8 +875,11 @@ if (selectedLegOption) {
             <div className="content-wrapper">
               {/* Left side - 3D Viewer */}
               <div className="viewer-container">
-                <div className="viewer" ref={viewerRef}>
-                </div>
+              <div className="viewer" ref={viewerRef}>
+  {/* {showMeasurements && currentModelRef.current && (
+    <DimensionHelper objectRef={currentModelRef} />
+  )} */}
+</div>
                 <div className="control-buttons">
                   <button className="control-btn" onClick={resetView}>
                     <RotateCcwIcon />
@@ -1077,7 +893,11 @@ if (selectedLegOption) {
                   <button className="control-btn" onClick={takeScreenshot}>
                     <CameraIcon />
                   </button>
-                  <button className="control-btn" onClick={toggleMeasurementLines}>
+                  {/* <button className="control-btn" onClick={RulerIcon}>
+  <RulerIcon />
+</button> */}
+
+<button className="control-btn" onClick={() => setShowMeasurements(!showMeasurements)}>
   <RulerIcon />
 </button>
 
