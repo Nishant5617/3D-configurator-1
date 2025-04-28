@@ -3,7 +3,7 @@ import { Canvas } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import { Suspense } from "react";
 import SceneContent from "./SceneContent";
-import QRCodeModal from "./QRCodeModal";
+import QRCodeModal from "./QrCodeModal";
 import { useConfigurator } from "./ConfiguratorContext";
 
 const ProductConfigurator = () => {

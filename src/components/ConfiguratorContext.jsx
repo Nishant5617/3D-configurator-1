@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState } from "react";
-import QRCodeModal          from "./QRCodeModal";
+import QRCodeModal          from "./QrCodeModal";
 import SceneContent         from "./SceneContent";
 import { GLTFExporter }     from "three/examples/jsm/exporters/GLTFExporter";
 
