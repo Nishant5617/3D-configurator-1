@@ -1,9 +1,15 @@
 import React from "react";
 import { Html } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
+import { useConfigurator } from "./ConfiguratorContext";
 
-const CanvasControls = ({ onScreenshot, onARView, onToggleMeasurements }) => {
+const CanvasControls = ({ onToggleMeasurements }) => {
   const { gl, scene, camera } = useThree();
+  const { actions } = useConfigurator();
+  
+  // Check if user is on mobile
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i
+    .test(navigator.userAgent);
 
   // Function to handle screenshot
   const handleScreenshot = () => {
@@ -25,8 +31,17 @@ const CanvasControls = ({ onScreenshot, onARView, onToggleMeasurements }) => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-
-      if (onScreenshot) onScreenshot();
+    }
+  };
+  
+  // Handle AR view based on device type
+  const handleARView = () => {
+    if (isMobile) {
+      // For mobile: directly call handleViewInAR, which will create blob and redirect
+      actions.handleViewInAR();
+    } else {
+      // For desktop: show QR code to configurator
+      actions.generateARQRCode();
     }
   };
 
@@ -75,7 +90,7 @@ const CanvasControls = ({ onScreenshot, onARView, onToggleMeasurements }) => {
 
       {/* AR View Button */}
       <button
-        onClick={onARView}
+        onClick={handleARView}
         style={{
           background: "#ffffff",
           border: "none",
